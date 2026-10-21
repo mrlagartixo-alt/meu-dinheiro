@@ -37,13 +37,21 @@ class FinanceViewModel(app: Application) : AndroidViewModel(app) {
     fun addBill(b: Bill) = viewModelScope.launch { billDao.insert(b) }
     fun deleteBill(b: Bill) = viewModelScope.launch { billDao.delete(b) }
 
-    /** Marca a conta como paga e gera a despesa correspondente. */
-    fun payBill(b: Bill) = viewModelScope.launch {
-        billDao.update(b.copy(paid = true))
+    fun updateBill(b: Bill) = viewModelScope.launch { billDao.update(b) }
+
+    /**
+     * Paga um valor (total ou parcial) de uma conta. Gera a despesa do valor pago
+     * e deixa só o restante como pendente.
+     */
+    fun payBill(b: Bill, value: Double) = viewModelScope.launch {
+        val paidValue = Math.round(minOf(value, b.amount) * 100) / 100.0
+        val remaining = Math.round((b.amount - paidValue) * 100) / 100.0
+        val partial = remaining >= 0.01
+        if (partial) billDao.update(b.copy(amount = remaining)) else billDao.update(b.copy(paid = true))
         txDao.insert(
             Transaction(
-                description = b.description,
-                amount = b.amount,
+                description = if (partial) "${b.description} (pagamento parcial)" else b.description,
+                amount = paidValue,
                 type = "EXPENSE",
                 category = "Contas",
                 essential = true

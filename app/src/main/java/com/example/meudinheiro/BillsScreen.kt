@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +23,8 @@ fun BillsScreen(bills: List<Bill>, vm: FinanceViewModel) {
     var amount by remember { mutableStateOf("") }
     var due by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var paying by remember { mutableStateOf<Bill?>(null) }
+    var editingBill by remember { mutableStateOf<Bill?>(null) }
 
     val pending = bills.filter { !it.paid }
     val paid = bills.filter { it.paid }.sortedByDescending { it.dueDate }
@@ -30,7 +33,7 @@ fun BillsScreen(bills: List<Bill>, vm: FinanceViewModel) {
     LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Text("Contas futuras", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("Ao pagar, a conta vira um gasto essencial.", color = Color.Gray)
+            Text("Toque em ✔ para pagar (total ou parcial). O valor pago vira gasto essencial.", color = Color.Gray)
         }
         item {
             Card(shape = RoundedCornerShape(18.dp)) {
@@ -72,7 +75,8 @@ fun BillsScreen(bills: List<Bill>, vm: FinanceViewModel) {
                         )
                         Text(money(b.amount), fontWeight = FontWeight.Bold)
                     }
-                    IconButton({ vm.payBill(b) }) { Icon(Icons.Default.Check, "Marcar como paga", tint = Green) }
+                    IconButton({ paying = b }) { Icon(Icons.Default.Check, "Pagar", tint = Green) }
+                    IconButton({ editingBill = b }) { Icon(Icons.Default.Edit, "Editar") }
                     IconButton({ vm.deleteBill(b) }) { Icon(Icons.Default.Delete, "Excluir") }
                 }
             }
@@ -92,4 +96,72 @@ fun BillsScreen(bills: List<Bill>, vm: FinanceViewModel) {
             }
         }
     }
+
+    paying?.let { b ->
+        PayBillDialog(b, onDismiss = { paying = null }, onPay = { v -> vm.payBill(b, v); paying = null })
+    }
+    editingBill?.let { b ->
+        EditBillDialog(b, onDismiss = { editingBill = null }, onSave = { vm.updateBill(it); editingBill = null })
+    }
+}
+
+@Composable
+fun PayBillDialog(b: Bill, onDismiss: () -> Unit, onPay: (Double) -> Unit) {
+    var text by remember(b.id) { mutableStateOf(b.amount.toString().replace(".", ",")) }
+    val value = parseMoney(text)
+    val valid = value != null && value > 0
+    val remaining = if (valid) maxOf(0.0, b.amount - value!!) else b.amount
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Pagar ${b.description}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Valor da conta: ${money(b.amount)}")
+                OutlinedTextField(
+                    text, { text = it },
+                    label = { Text("Quanto você pagou? (R$)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
+                if (valid && value!! > b.amount) {
+                    Text("O valor é maior que a conta; será registrado ${money(b.amount)}.", color = Amber)
+                }
+                Text(
+                    if (remaining >= 0.01) "Vai restar ${money(remaining)} pendente." else "A conta será quitada.",
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (remaining >= 0.01) Amber else Green
+                )
+            }
+        },
+        confirmButton = { TextButton({ onPay(value!!) }, enabled = valid) { Text("Confirmar pagamento") } },
+        dismissButton = { TextButton(onDismiss) { Text("Cancelar") } }
+    )
+}
+
+@Composable
+fun EditBillDialog(b: Bill, onDismiss: () -> Unit, onSave: (Bill) -> Unit) {
+    var desc by remember(b.id) { mutableStateOf(b.description) }
+    var amount by remember(b.id) { mutableStateOf(b.amount.toString().replace(".", ",")) }
+    var due by remember(b.id) { mutableStateOf(formatDate(b.dueDate)) }
+    val value = parseMoney(amount)
+    val date = parseDate(due)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar conta") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(desc, { desc = it }, label = { Text("Descrição") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(amount, { amount = it }, label = { Text("Valor pendente (R$)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(due, { due = it }, label = { Text("Vencimento (dd/mm/aaaa)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(b.copy(description = desc.trim(), amount = value!!, dueDate = date!!)) },
+                enabled = value != null && value > 0 && date != null && desc.isNotBlank()
+            ) { Text("Salvar") }
+        },
+        dismissButton = { TextButton(onDismiss) { Text("Cancelar") } }
+    )
 }
