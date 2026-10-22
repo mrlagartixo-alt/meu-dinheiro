@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meu Dinheiro iOS</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Meu Dinheiro">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F7F8FA">
+<style>
+:root{--bg:#F7F8FA;--card:#fff;--text:#1E2430;--gray:#6b7280;--green:#16855B;--red:#C83C4A;--blue:#356AE6;--amber:#B7791F;--line:#e5e7eb}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Roboto,sans-serif;font-size:16px}
+#app{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 18px) 18px calc(96px + env(safe-area-inset-bottom))}
+h1{font-size:28px;margin:0 0 2px}h2{font-size:21px;margin:22px 0 8px}h3{margin:0 0 6px}
+.gray{color:var(--gray)}.green{color:var(--green)}.red{color:var(--red)}.amber{color:var(--amber)}.b{font-weight:700}.sb{font-weight:600}
+.card{background:var(--card);border-radius:18px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:12px}
+.big{font-size:32px;font-weight:700;margin:2px 0 10px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.row>.grow{flex:1;min-width:0}
+input,select{width:100%;font-size:16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;margin:5px 0;color:var(--text)}
+label.chk{display:flex;align-items:center;gap:8px;margin:8px 0}
+label.chk input{width:22px;height:22px;margin:0}
+button{font-size:16px;border:0;border-radius:12px;padding:12px 16px;background:var(--blue);color:#fff;font-weight:600;width:100%;margin-top:6px}
+button.ghost{background:#eef1f6;color:var(--text)}
+button.icon{width:auto;padding:8px 10px;background:#eef1f6;color:var(--text);margin:0 0 0 6px;font-size:18px}
+button.ok{background:var(--green)}
+button.danger{background:var(--red)}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:#fff;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;background:none;color:var(--gray);border-radius:0;margin:0;padding:10px 0 8px;font-size:11px;font-weight:600}
+nav button span{display:block;font-size:22px}
+nav button.on{color:var(--blue)}
+.bar{height:10px;background:#e8ebf1;border-radius:6px;overflow:hidden;margin:5px 0 10px}
+.bar>i{display:block;height:100%;background:var(--blue)}
+.pie{width:170px;height:170px;border-radius:50%;margin:6px auto 14px}
+.leg{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:15px}
+.leg i{width:12px;height:12px;border-radius:3px;flex:none}
+.months{display:flex;align-items:flex-end;height:140px;gap:4px}
+.months>div{flex:1;display:flex;align-items:flex-end;gap:2px;height:100%}
+.months i{flex:1;border-radius:3px 3px 0 0;min-height:1px}
+.mlabels{display:flex;gap:4px;margin-top:4px}.mlabels span{flex:1;text-align:center;font-size:11px;color:var(--gray)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.modal>div{background:#fff;width:100%;max-width:640px;border-radius:22px 22px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
+.switch{display:flex;align-items:center;gap:10px;margin:10px 0}
+.switch input{width:22px;height:22px;margin:0}
+small{color:var(--gray)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<nav id="nav"></nav>
+<div id="modal"></div>
+<script>
+'use strict';
+const KEY = 'meu_dinheiro_v1';
+const DAY = 86400000;
+const COLORS = ['#356AE6','#16855B','#C83C4A','#B7791F','#8E44AD','#17A2B8','#E67E22','#7F8C8D'];
+const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+// ---------- estado ----------
+let S = load();
+let tab = 0;
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && s.tx && s.bills) return Object.assign({budget: '3000', limit: '600', only30: false}, s);
+  } catch (e) {}
+  return {tx: [], bills: [], budget: '3000', limit: '600', only30: false};
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+// ---------- utilidades ----------
+const brl = new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'});
+const money = v => brl.format(v);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const r2 = v => Math.round(v * 100) / 100;
+function parseMoney(raw) {
+  let s = String(raw).toLowerCase().replace('r$', '').replace(/\s/g, '');
+  if (!s) return null;
+  if (s.includes('.') && s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (s.includes(',')) s = s.replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  const n = Number(s);
+  return s !== '' && isFinite(n) ? n : null;
+}
+const fmtDate = ms => new Date(ms).toLocaleDateString('pt-BR');
+const fmtDateTime = ms => new Date(ms).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }
+function dateFromInput(v) { if (!v) return null; const [y,m,d] = v.split('-').map(Number); return new Date(y, m-1, d).getTime(); }
+function inputFromDate(ms) { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+const $ = id => document.getElementById(id);
+const valOf = id => $(id).value;
+
+// ---------- linguagem natural ----------
+function parseText(text, essentialDefault) {
+  const lower = text.toLowerCase();
+  const m = lower.match(/\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?/);
+  if (!m) return null;
+  const value = parseMoney(m[0]);
+  if (value == null) return null;
+  const has = (...w) => w.some(x => lower.includes(x));
+  const isIncome = has('ganhei','recebi','recebido','salário','salario','vendi','venda','renda','freela','entrou');
+  let category;
+  if (has('mercado','comida','almoço','almoco','lanche','restaurante')) category = 'Alimentação';
+  else if (has('uber','gasolina','combustível','combustivel','ônibus','onibus')) category = 'Transporte';
+  else if (has('aluguel','casa','luz','água','agua','internet')) category = 'Moradia';
+  else if (has('netflix','spotify','assinatura')) category = 'Assinaturas';
+  else if (has('bolo','freela','salário','salario')) category = 'Renda';
+  else if (has('jogo','cinema','lazer')) category = 'Lazer';
+  else if (has('farmácia','farmacia','remédio','remedio','médico','medico')) category = 'Saúde';
+  else category = isIncome ? 'Outras receitas' : 'Outros';
+  const notEss = has('não essencial','nao essencial','supérfluo','superfluo');
+  const t = {
+    id: uid(), description: text.trim().charAt(0).toUpperCase() + text.trim().slice(1),
+    amount: value, type: isIncome ? 'INCOME' : 'EXPENSE', category,
+    essential: isIncome ? true : (notEss ? false : essentialDefault), date: Date.now()
+  };
+  S.tx.unshift(t); save();
+  return t;
+}
+
+// ---------- navegação ----------
+const TABS = [['🏠','Resumo'],['💬','Chat'],['📋','Lançam.'],['📅','Contas']];
+function renderNav() {
+  $('nav').innerHTML = TABS.map((t, i) => `<button class="${i===tab?'on':''}" onclick="go(${i})"><span>${t[0]}</span>${t[1]}</button>`).join('');
+}
+function go(i) { tab = i; render(); window.scrollTo(0, 0); }
+function render() {
+  renderNav();
+  $('app').innerHTML = [dashShell, chatHTML, txHTML, billsHTML][tab]();
+  if (tab === 0) updateDash();
+}
+
+// ---------- resumo ----------
+function dashShell() {
+  return `
+  <h1>Meu Dinheiro</h1><div class="gray">Seu controle financeiro em uma conversa.</div>
+  <label class="switch"><input type="checkbox" id="only30" ${S.only30?'checked':''} onchange="S.only30=this.checked;save();updateDash()"> Somente últimos 30 dias</label>
+  <div id="d-top"></div>
+  <h2>Orçamento</h2>
+  <div class="card">
+    <div>Defina quanto pretende gastar no período.</div>
+    <input id="budget" inputmode="decimal" placeholder="Orçamento total (R$)" value="${esc(S.budget)}" oninput="S.budget=this.value;save();updateDash()">
+    <input id="limit" inputmode="decimal" placeholder="Limite não essencial (R$)" value="${esc(S.limit)}" oninput="S.limit=this.value;save();updateDash()">
+    <div id="d-rem"></div>
+  </div>
+  <div id="d-bottom"></div>
+  <h2>Backup</h2>
+  <div class="card"><small>Seus dados ficam só neste aparelho. Exporte um backup de vez em quando.</small>
+    <button class="ghost" onclick="exportData()">Exportar backup</button>
+    <button class="ghost" onclick="$('imp').click()">Importar backup</button>
+    <input type="file" id="imp" accept="application/json" style="display:none" onchange="importData(this)">
+  </div>`;
+}
+function stats() {
+  const now = Date.now();
+  const list = S.only30 ? S.tx.filter(t => now - t.date <= 30 * DAY) : S.tx;
+  const income = list.filter(t => t.type === 'INCOME').reduce((a, t) => a + t.amount, 0);
+  const exp = list.filter(t => t.type === 'EXPENSE');
+  const expense = exp.reduce((a, t) => a + t.amount, 0);
+  const essential = exp.filter(t => t.essential).reduce((a, t) => a + t.amount, 0);
+  const balance = income - expense;
+  const budget = parseMoney(S.budget) || 0, limit = parseMoney(S.limit) || 0;
+  const remB = budget - expense, remN = limit - (expense - essential);
+  const pendingSoon = S.bills.filter(b => !b.paid && b.dueDate <= now + 30 * DAY).sort((a, b) => a.dueDate - b.dueDate);
+  const pendingTotal = pendingSoon.reduce((a, b) => a + b.amount, 0);
+  const free = balance - pendingTotal;
+  const cats = {}; exp.forEach(t => cats[t.category] = (cats[t.category] || 0) + t.amount);
+  return {income, expense, essential, nonEss: expense - essential, balance, remB, remN, pendingSoon, pendingTotal, free, safe: Math.min(free, remB, remN),
+          cats: Object.entries(cats).sort((a, b) => b[1] - a[1])};
+}
+function barRow(label, v, total) {
+  const f = total > 0 ? Math.min(100, v / total * 100) : 0;
+  return `<div class="row"><span>${label}</span><span class="sb">${money(v)}</span></div><div class="bar"><i style="width:${f}%"></i></div>`;
+}
+function monthlyBars() {
+  const keys = [];
+  for (let back = 5; back >= 0; back--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - back); keys.push([d.getFullYear(), d.getMonth()]); }
+  const sum = (type, [y, m]) => S.tx.filter(t => { const d = new Date(t.date); return t.type === type && d.getFullYear() === y && d.getMonth() === m; }).reduce((a, t) => a + t.amount, 0);
+  const inc = keys.map(k => sum('INCOME', k)), ex = keys.map(k => sum('EXPENSE', k));
+  const mx = Math.max(1, ...inc, ...ex);
+  return `<div class="months">${keys.map((k, i) => `<div><i style="background:var(--green);height:${inc[i]/mx*100}%"></i><i style="background:var(--red);height:${ex[i]/mx*100}%"></i></div>`).join('')}</div>
+  <div class="mlabels">${keys.map(k => `<span>${MONTHS[k[1]]}</span>`).join('')}</div>
+  <div class="leg" style="margin-top:10px"><i style="background:var(--green)"></i>Entradas &nbsp; <i style="background:var(--red)"></i>Gastos</div>`;
+}
+function updateDash() {
+  if (tab !== 0) return;
+  const s = stats();
+  let posso;
+  if (s.free < 0) posso = `<div class="b red">Não. Seu saldo não cobre as contas dos próximos 30 dias.</div>`;
+  else if (s.remN <= 0 || s.remB <= 0) posso = `<div class="b amber">Melhor não. Você atingiu o limite do orçamento. Só gaste com o essencial.</div>`;
+  else posso = `<div class="b green">Sim, até ${money(s.safe)} em gastos não essenciais.</div>`;
+  const today = startOfToday();
+  $('d-top').innerHTML = `
+  <div class="card"><div class="gray">${S.only30 ? 'Saldo (30 dias)' : 'Saldo total'}</div><div class="big">${money(s.balance)}</div>
+    <div class="row"><div><div class="gray">Entradas</div><div class="b green">${money(s.income)}</div></div>
+    <div style="text-align:right"><div class="gray">Gastos</div><div class="b red">${money(s.expense)}</div></div></div></div>
+  <h2>Posso gastar?</h2>
+  <div class="card">${posso}
+    <div class="gray" style="margin-top:6px">Saldo: ${money(s.balance)}</div>
+    <div class="gray">Contas a pagar (30 dias): ${money(s.pendingTotal)}</div>
+    <div class="gray">Saldo livre após contas: ${money(s.free)}</div></div>
+  ${s.pendingSoon.length ? `<h2>Próximas contas</h2><div class="card">${s.pendingSoon.slice(0, 4).map(b =>
+    `<div class="row" style="margin:6px 0"><span class="grow ${b.dueDate < today ? 'red' : ''}">${esc(b.description)} (${fmtDate(b.dueDate)})</span><span class="b">${money(b.amount)}</span></div>`).join('')}</div>` : ''}`;
+  $('d-rem').innerHTML = `
+    <div class="b ${s.remB >= 0 ? 'green' : 'red'}" style="margin-top:6px">Restante do orçamento: ${money(s.remB)}</div>
+    <div class="b ${s.remN >= 0 ? 'green' : 'red'}">Restante para não essenciais: ${money(s.remN)}</div>`;
+  let pie = '<div class="gray">Sem gastos registrados ainda.</div>';
+  if (s.cats.length) {
+    let acc = 0;
+    const stops = s.cats.map(([, v], i) => { const a = acc / s.expense * 100; acc += v; return `${COLORS[i % 8]} ${a}% ${acc / s.expense * 100}%`; }).join(',');
+    pie = `<div class="pie" style="background:conic-gradient(${stops})"></div>` +
+      s.cats.map(([c, v], i) => `<div class="leg"><i style="background:${COLORS[i % 8]}"></i><span style="flex:1">${esc(c)}</span><span>${Math.round(v / s.expense * 100)}% • ${money(v)}</span></div>`).join('');
+  }
+  $('d-bottom').innerHTML = `
+  <h2>Essenciais x não essenciais</h2><div class="card">${barRow('Essenciais', s.essential, s.expense)}${barRow('Não essenciais', s.nonEss, s.expense)}</div>
+  <h2>Entradas x gastos por mês</h2><div class="card">${monthlyBars()}</div>
+  <h2>Gastos por categoria</h2><div class="card">${pie}</div>
+  <div class="gray">💡 Marque gastos como essenciais ou não essenciais para descobrir onde está seu dinheiro de verdade.</div>`;
+}
+
+// ---------- chat ----------
+let lastMsg = '';
+function chatHTML() {
+  return `<h1>Fale com seu dinheiro</h1><div class="gray">Escreva como falaria normalmente.</div>
+  <div class="card" style="margin-top:16px"><div class="b">Exemplos:</div>
+    • Gastei 100 reais no mercado<br>• Ganhei 20 reais vendendo bolo<br>• Gastei 35,50 no Uber<br>• Recebi 1.500 de um freela<br>• Gastei 60 no cinema, não essencial</div>
+  <input id="chat" placeholder="Digite seu lançamento" onkeydown="if(event.key==='Enter')sendChat()">
+  <label class="chk"><input type="checkbox" id="ess" checked> Marcar como essencial</label>
+  <button onclick="sendChat()">Registrar</button>
+  <div id="chatmsg" class="sb" style="margin-top:16px">${esc(lastMsg)}</div>`;
+}
+function sendChat() {
+  const t = parseText(valOf('chat'), $('ess').checked);
+  if (t) { lastMsg = `✅ Registrado: ${money(t.amount)} — ${t.category}`; $('chat').value = ''; }
+  else lastMsg = 'Não consegui identificar o valor. Tente: "Gastei 100 reais no mercado".';
+  $('chatmsg').textContent = lastMsg;
+}
+
+// ---------- lançamentos ----------
+function txHTML() {
+  const now = Date.now();
+  const list = (S.only30 ? S.tx.filter(t => now - t.date <= 30 * DAY) : S.tx).slice().sort((a, b) => b.date - a.date);
+  return `<h1>Lançamentos</h1>
+  <label class="switch"><input type="checkbox" ${S.only30?'checked':''} onchange="S.only30=this.checked;save();render()"> Somente últimos 30 dias</label>
+  ${list.length ? '' : '<div class="gray">Nenhum lançamento.</div>'}
+  ${list.map(t => `<div class="card"><div class="row"><div class="grow"><div class="sb">${esc(t.description)}</div>
+    <div class="gray">${esc(t.category)} • ${t.type === 'INCOME' ? 'Entrada' : t.essential ? 'Essencial' : 'Não essencial'}</div>
+    <div class="gray">${fmtDateTime(t.date)}</div></div>
+    <div style="text-align:right"><div class="b ${t.type === 'INCOME' ? 'green' : 'red'}">${t.type === 'INCOME' ? '+ ' : '- '}${money(t.amount)}</div>
+    <div style="margin-top:6px"><button class="icon" onclick="editTx('${t.id}')">✏️</button><button class="icon" onclick="delTx('${t.id}')">🗑️</button></div></div></div></div>`).join('')}`;
+}
+function modal(html) { $('modal').innerHTML = `<div class="modal" onclick="if(event.target===this)closeModal()"><div>${html}</div></div>`; }
+function closeModal() { $('modal').innerHTML = ''; }
+function delTx(id) {
+  const t = S.tx.find(x => x.id === id); if (!t) return;
+  if (confirm(`Excluir "${t.description}" (${money(t.amount)})?`)) { S.tx = S.tx.filter(x => x.id !== id); save(); render(); }
+}
+function editTx(id) {
+  const t = S.tx.find(x => x.id === id); if (!t) return;
+  modal(`<h3>Editar lançamento</h3>
+  <input id="e-desc" value="${esc(t.description)}" placeholder="Descrição">
+  <input id="e-amt" inputmode="decimal" value="${String(t.amount).replace('.', ',')}" placeholder="Valor (R$)">
+  <input id="e-cat" value="${esc(t.category)}" placeholder="Categoria">
+  <select id="e-type" onchange="$('e-essw').style.display=this.value==='EXPENSE'?'flex':'none'">
+    <option value="EXPENSE" ${t.type === 'EXPENSE' ? 'selected' : ''}>Gasto</option><option value="INCOME" ${t.type === 'INCOME' ? 'selected' : ''}>Entrada</option></select>
+  <label class="chk" id="e-essw" style="display:${t.type === 'EXPENSE' ? 'flex' : 'none'}"><input type="checkbox" id="e-ess" ${t.essential ? 'checked' : ''}> Essencial</label>
+  <div id="e-err" class="red"></div>
+  <button onclick="saveTx('${id}')">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button>`);
+}
+function saveTx(id) {
+  const t = S.tx.find(x => x.id === id);
+  const v = parseMoney(valOf('e-amt')), d = valOf('e-desc').trim();
+  if (!d || v == null || v <= 0) { $('e-err').textContent = 'Informe descrição e valor válidos.'; return; }
+  t.description = d; t.amount = v; t.category = valOf('e-cat').trim() || 'Outros';
+  t.type = valOf('e-type'); t.essential = t.type === 'INCOME' ? true : $('e-ess').checked;
+  save(); closeModal(); render();
+}
+
+// ---------- contas ----------
+function billsHTML() {
+  const today = startOfToday();
+  const pending = S.bills.filter(b => !b.paid).sort((a, b) => a.dueDate - b.dueDate);
+  const paid = S.bills.filter(b => b.paid).sort((a, b) => b.dueDate - a.dueDate);
+  return `<h1>Contas futuras</h1><div class="gray">Toque em ✔ para pagar (total ou parcial). O valor pago vira gasto essencial.</div>
+  <div class="card" style="margin-top:14px">
+    <input id="b-desc" placeholder="Descrição (ex.: Cartão)">
+    <input id="b-amt" inputmode="decimal" placeholder="Valor (R$)">
+    <input id="b-due" type="date">
+    <div id="b-err" class="red"></div>
+    <button onclick="addBill()">Adicionar conta</button></div>
+  <h2>A pagar</h2>
+  ${pending.length ? '' : '<div class="gray">Nenhuma conta pendente.</div>'}
+  ${pending.map(b => `<div class="card"><div class="row"><div class="grow"><div class="sb">${esc(b.description)}</div>
+    <div class="${b.dueDate < today ? 'red' : 'gray'}">${b.dueDate < today ? 'Vencida em ' : 'Vence em '}${fmtDate(b.dueDate)}</div>
+    <div class="b">${money(b.amount)}</div></div>
+    <div><button class="icon" onclick="payBill('${b.id}')">✔️</button><button class="icon" onclick="editBill('${b.id}')">✏️</button><button class="icon" onclick="delBill('${b.id}')">🗑️</button></div></div></div>`).join('')}
+  ${paid.length ? `<h2>Pagas</h2>${paid.map(b => `<div class="card"><div class="row"><div class="grow"><div>${esc(b.description)}</div><div class="gray">${fmtDate(b.dueDate)} • ${money(b.amount)}</div></div>
+    <button class="icon" onclick="delBill('${b.id}')">🗑️</button></div></div>`).join('')}` : ''}`;
+}
+function addBill() {
+  const d = valOf('b-desc').trim(), v = parseMoney(valOf('b-amt')), due = dateFromInput(valOf('b-due'));
+  const err = !d ? 'Informe a descrição.' : (v == null || v <= 0) ? 'Valor inválido.' : due == null ? 'Informe o vencimento.' : '';
+  if (err) { $('b-err').textContent = err; return; }
+  S.bills.push({id: uid(), description: d, amount: v, dueDate: due, paid: false}); save(); render();
+}
+function delBill(id) {
+  const b = S.bills.find(x => x.id === id); if (!b) return;
+  if (confirm(`Excluir a conta "${b.description}"?`)) { S.bills = S.bills.filter(x => x.id !== id); save(); render(); }
+}
+function payBill(id) {
+  const b = S.bills.find(x => x.id === id); if (!b) return;
+  modal(`<h3>Pagar ${esc(b.description)}</h3><div>Valor da conta: <b>${money(b.amount)}</b></div>
+  <input id="p-val" inputmode="decimal" value="${String(b.amount).replace('.', ',')}" placeholder="Quanto você pagou? (R$)" oninput="payPreview(${b.amount})">
+  <div id="p-prev" class="sb"></div>
+  <button class="ok" id="p-ok" onclick="confirmPay('${id}')">Confirmar pagamento</button><button class="ghost" onclick="closeModal()">Cancelar</button>`);
+  payPreview(b.amount);
+}
+function payPreview(total) {
+  const v = parseMoney(valOf('p-val')), ok = v != null && v > 0;
+  $('p-ok').disabled = !ok;
+  if (!ok) { $('p-prev').textContent = ''; return; }
+  const rest = r2(Math.max(0, total - v));
+  $('p-prev').innerHTML = (v > total ? `<div class="amber">O valor é maior que a conta; será registrado ${money(total)}.</div>` : '') +
+    (rest >= 0.01 ? `<div class="amber">Vai restar ${money(rest)} pendente.</div>` : '<div class="green">A conta será quitada.</div>');
+}
+function confirmPay(id) {
+  const b = S.bills.find(x => x.id === id);
+  const v = parseMoney(valOf('p-val')); if (!b || v == null || v <= 0) return;
+  const paidValue = r2(Math.min(v, b.amount)), rest = r2(b.amount - paidValue), partial = rest >= 0.01;
+  if (partial) b.amount = rest; else b.paid = true;
+  S.tx.unshift({id: uid(), description: partial ? `${b.description} (pagamento parcial)` : b.description, amount: paidValue,
+    type: 'EXPENSE', category: 'Contas', essential: true, date: Date.now()});
+  save(); closeModal(); render();
+}
+function editBill(id) {
+  const b = S.bills.find(x => x.id === id); if (!b) return;
+  modal(`<h3>Editar conta</h3>
+  <input id="eb-desc" value="${esc(b.description)}" placeholder="Descrição">
+  <input id="eb-amt" inputmode="decimal" value="${String(b.amount).replace('.', ',')}" placeholder="Valor pendente (R$)">
+  <input id="eb-due" type="date" value="${inputFromDate(b.dueDate)}">
+  <div id="eb-err" class="red"></div>
+  <button onclick="saveBill('${id}')">Salvar</button><button class="ghost" onclick="closeModal()">Cancelar</button>`);
+}
+function saveBill(id) {
+  const b = S.bills.find(x => x.id === id);
+  const d = valOf('eb-desc').trim(), v = parseMoney(valOf('eb-amt')), due = dateFromInput(valOf('eb-due'));
+  if (!d || v == null || v <= 0 || due == null) { $('eb-err').textContent = 'Preencha descrição, valor e data válidos.'; return; }
+  b.description = d; b.amount = v; b.dueDate = due; save(); closeModal(); render();
+}
+
+// ---------- backup ----------
+function exportData() {
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'meu-dinheiro-backup.json';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function importData(input) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result);
+      if (!Array.isArray(d.tx) || !Array.isArray(d.bills)) throw 0;
+      if (confirm('Substituir seus dados atuais pelo backup?')) { S = Object.assign({budget: '3000', limit: '600', only30: false}, d); save(); render(); }
+    } catch (e) { alert('Arquivo de backup inválido.'); }
+  };
+  r.readAsText(f);
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+render();
+</script>
+</body>
+</html>

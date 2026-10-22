@@ -26,3 +26,7 @@ aparelho e "Posso gastar?" considerando saldo, contas dos próximos 30 dias, or�
 1. Crie um repositório e envie TODO o conteúdo desta pasta (inclusive `.github`).
 2. Aba **Actions** > **Build APK** (roda sozinho a cada push; ou "Run workflow").
 3. Ao terminar (~5 min), baixe o APK em **Releases** > "Meu Dinheiro (APK mais recente)" > `MeuDinheiro.apk`.
+
+## Versão iPhone (app web instalável)
+Abra https://mrlagartixo-alt.github.io/meu-dinheiro/ no **Safari**, toque em Compartilhar > **Adicionar à Tela de Início**.
+Os dados ficam no aparelho; use "Exportar backup" no Resumo para guardar uma cópia.
